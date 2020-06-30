@@ -1,0 +1,124 @@
+%!PS-Adobe-2.0
+%%Creator: Fredrik Jonsson <http://jonsson.eu>
+%%Title: kochflake.ps
+%%BoundingBox: 0 0 595 842
+%%DocumentPaperSizes: a4
+%%CreationDate: 14-Aug-96
+%%EndComments
+/sqrtthree {3.0 sqrt} bind def % Global definition
+/xc 300 def     % Global default page x-coordinate of origo in pt (1/72 in)
+/yc 450 def     % Global default page y-coordinate of origo in pt (1/72 in)
+/scalefac 100 def  % Scale in points per dimensionless unit in plot
+
+/pagecoord {    % x y (as we enter)
+   scalefac     % x y scalefac
+   mul          % x y*scalefac
+   yc           % x y*scalefac yc
+   add          % x yc+y*scalefac
+   exch         % yc+y*scalefac x
+   scalefac     % yc+y*scalefac x scalefac
+   mul          % yc+y*scalefac x*scalefac
+   xc           % yc+y*scalefac x*scalefac xc
+   add          % yc+y*scalefac xc+x*scalefac
+   exch         % xc+x*scalefac yc+y*scalefac
+} bind def
+
+/strcat {       % str1[] str2[] (as we enter)
+   2            % str1[] str2[] 2
+   copy         % str1[] str2[] str1[] str2[]
+   length       % str1[] str2[] str1[] strlen(str2[])
+   exch         % str1[] str2[] strlen(str2[]) str1[]
+   length       % str1[] str2[] strlen(str2[]) strlen(str1[])
+   add          % str1[] str2[] {n=strlen(str2[])+strlen(str1[])}
+   string       % str1[] str2[] newstr[n]
+   dup          % str1[] str2[] newstr[n] newstr[n]
+   dup          % str1[] str2[] newstr[n] newstr[n] newstr[n]
+   4 3 roll     % newstr[n] newstr[n] newstr[n] str1[] str2[]
+   4 index      % newstr[n] newstr[n] newstr[n] str1[] str2[] newstr[n]
+   length       % newstr[n] newstr[n] newstr[n] str1[] str2[] n
+   exch         % newstr[n] newstr[n] newstr[n] str1[] n str2[]
+   putinterval
+   3 1 roll
+   exch
+   0
+   exch
+   putinterval
+} bind def
+
+/kochsegment { % Stack: xa ya xb yb depth maxdepth (as we enter)
+   6 dict begin % Dictionary for 6 args, active until 'end' statement
+   /maxdepth exch def
+   /depth exch def
+   /yb exch def
+   /xb exch def
+   /ya exch def
+   /xa exch def
+   depth maxdepth eq               % Is depth equal to maxdepth?
+   {
+      xb yb pagecoord lineto       % If so, draw line segment to (xb,yb)
+   } if
+   depth maxdepth lt               % Otherwise, if depth less than maxdepth,
+   {                               % then construct refined Koch segments.
+      /xba {xb xa sub 3.0 div} def % (xb-xa)/3.0
+      /yba {yb ya sub 3.0 div} def % (yb-ya)/3.0
+      /xca {xa xba add} def        % xa+(xb-xa)/3.0
+      /yca {ya yba add} def        % ya+(yb-ya)/3.0
+      /xcb {xb xba sub} def        % xb-(xb-xa)/3.0
+      /ycb {yb yba sub} def        % yb-(yb-ya)/3.0
+      /xcc {xa xb add 2.0 div yb ya sub 2.0 div sqrtthree div sub} def
+      /ycc {ya yb add 2.0 div xb xa sub 2.0 div sqrtthree div add} def
+      xa ya xca yca depth 1 add maxdepth kochsegment    % Recursion here, ...
+      xca yca xcc ycc depth 1 add maxdepth kochsegment  % ... here, ...
+      xcc ycc xcb ycb depth 1 add maxdepth kochsegment  % ... here, ...
+      xcb ycb xb yb depth 1 add maxdepth kochsegment    % ... and here.
+   } if
+   end
+} bind def
+
+/kochflake {
+   1 dict begin   % Dictionary for 1 arg, active until 'end' statement
+   /yc exch def   % Alters the GLOBAL definition of xc
+   /xc exch def   % Alters the GLOBAL definition of yc
+   /maxdepth exch def
+   clear
+   .025 setlinewidth
+   2 setlinecap
+   2 setlinejoin
+   /Helvetica findfont 9 scalefont setfont
+   maxdepth 0 le
+   {
+      -0.7 0 pagecoord moveto
+      (Please increase maxdepth to at least 1) show
+   } if
+   maxdepth 0 gt
+   {
+      -0.35 0 pagecoord moveto
+      (Recursion level ) maxdepth 2 string cvs strcat show
+      0.0 1.0 pagecoord moveto % Start at the "top of the pyramid"
+      0.0 1.0 sqrtthree 2.0 div -0.5 1 maxdepth kochsegment
+      sqrtthree 2.0 div -0.5 sqrtthree neg 2.0 div -0.5 1 maxdepth kochsegment
+      sqrtthree neg 2.0 div -0.5 0.0 1.0 1 maxdepth kochsegment
+      stroke
+   } if
+   end
+} bind def
+
+/title {
+   /Helvetica-Bold findfont 10 scalefont setfont
+   80 740 moveto (Recursion in PostScript: The Koch snowflake fractal) show
+   /Courier findfont 9 scalefont setfont
+   80 728 moveto (http://jonsson.eu/programs/postscript/koch/) show
+} def
+
+%
+% Main program: For each level, enter the maximum depth, x- and y-coordinates
+% to the stack and single calls to the kochflake routine.
+%
+title
+1 180 620 kochflake % Recursion level 1 centered at (180 pt, 620 pt)
+2 420 620 kochflake % Recursion level 2 centered at (420 pt, 620 pt)
+3 180 400 kochflake % Recursion level 3 centered at (180 pt, 400 pt)
+4 420 400 kochflake % Recursion level 4 centered at (420 pt, 400 pt)
+6 180 180 kochflake % Recursion level 6 centered at (180 pt, 180 pt)
+8 420 180 kochflake % Recursion level 8 centered at (420 pt, 180 pt)
+showpage

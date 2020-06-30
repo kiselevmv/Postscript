@@ -1,0 +1,398 @@
+%!PS-Adobe-1
+%%Creator: Fredrik Jonsson <http://jonsson.eu>
+%%Title: odesolv.ps  <http://jonsson.eu/programs/postscript/odesolv/>
+%%Orientation: Portrait
+%%CreationDate: 17-Feb-10
+%%EndComments
+
+%
+% The odesolv.ps program illustrates the solving of systems of ordinary
+% differential equations (ODEs) directly in the PostScript programming
+% language [1], here specifically illustrated for the 3D trajectory of the
+% Lorenz attractor [2]. The instructions defined in the supplied routines
+% are typically interpreted by either a PostScript viewer (such as GhostView
+% with GhostScript as the interpreting engine) or the PostScript interpretor
+% of your printer (in which case no computation is performed by your local
+% computer, putting the whole task into the hands of your printer).
+%
+% As the method of choice for solving the system of ODEs of the Lorenz
+% attractor, I have here implemented the standard four-point Runge-Kutta
+% algorithm [3], somewhat tweaked to operate directly on a stack.
+%
+% For the parameters of the Lorenz equations,
+%
+%         d  / x(t) \   / fx(x,y,z) \   / sigma*(y-x) \
+%        --- | y(t) | = | fy(x,y,z) | = | x*(rho-z)-y |,
+%         dt \ z(t) /   \ fz(x,y,z) /   \ x*y-beta*z  /
+%
+% they are in this specific case chosen as sigma = 10 (the Prandtl number),
+% rho = 28 (the Rayleigh number), and beta = 8/3, while the starting point
+% is chosen as (x0, y0, z0) = (0, 1.0, 0.9). However, please feel free to
+% play around with these parameters.
+%
+% [1] http://www.adobe.com/postscript/
+% [2] http://en.wikipedia.org/wiki/Lorenz_attractor
+% [3] http://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
+%
+% #################################################
+% #     BEGIN OF USER CUSTOMIZABLE PARAMETERS     #
+% #################################################
+/sigma {10.0} def          % Prandtl number
+/rho {28.0} def            % Rayleigh number
+/beta {8.0 3.0 div} bind def
+/r0 {0.00 1.00 0.90} def   % (x0, y0, z0), starting point of trajectory
+/h {0.001} def             % Step length in fourth-order Runge-Kutta method
+/num_iter {70000} def      % Number of iterations in the Runge-Kutta method
+% #################################################
+% #      END OF USER CUSTOMIZABLE PARAMETERS      #
+% #################################################
+
+%
+% Given a coordinate triplet (x,y,z) on the stack, the fx, fy, fz and f
+% routines computes the right-hand side of the Lorenz equation
+%
+%         d  / x(t) \   / fx(x,y,z) \   / sigma*(y-x) \
+%        --- | y(t) | = | fy(x,y,z) | = | x*(rho-z)-y |
+%         dt \ z(t) /   \ fz(x,y,z) /   \ x*y-beta*z  /
+%
+/fx {         % x y z (as we enter)
+   3 1 roll   % z x y
+   dup        % z x y y
+   4 2 roll   % y y z x
+   dup        % y y z x x
+   5 4 roll   % y z x x y
+   exch       % y z x y x
+   sub        % y z x (y-x)
+   sigma      % y z x (y-x) sigma
+   mul        % y z x sigma*(y-x)
+   exch       % y z sigma*(y-x) x
+   4 2 roll   % sigma*(y-x) x y z == fx x y z
+} def
+
+/fy {         % fx x y z (as we enter)
+   dup        % fx x y z z
+   rho        % fx x y z z rho
+   sub        % fx x y z (z-rho)
+   5 3 roll   % y z (z-rho) fx x
+   dup        % y z (z-rho) fx x x
+   4 3 roll   % y z fx x x (z-rho)
+   mul        % y z fx x (x*(z-rho))
+   5 4 roll   % z fx x (x*(z-rho)) y
+   dup        % z fx x (x*(z-rho)) y y
+   3 1 roll   % z fx x y (x*(z-rho)) y
+   add        % z fx x y ((x*(z-rho))+y)
+   neg        % z fx x y ((x*(rho-z))-y)
+   3 1 roll   % z fx ((x*(rho-z))-y) x y
+   5 4 roll   % fx ((x*(rho-z))-y) x y z == fx fy x y z
+} def
+
+/fz {         % fx fy x y z (as we enter)
+   beta       % fx fy x y z beta
+   mul        % fx fy x y (beta*z)
+   3 1 roll   % fx fy (beta*z) x y
+   mul        % fx fy (beta*z) (x*y)
+   sub        % fx fy (beta*z-x*y)
+   neg        % fx fy (x*y-beta*z) == fx fy fz
+} def
+
+/f {          % x y z (as we enter)
+   fx         % fx x y z
+   fy         % fx fy x y z
+   fz         % fx fy fz == {sigma*(y-x), x*(rho-z)-y, x*y-beta*z}
+} def
+
+%
+% The dupvec routine duplicates a 3D vector on the stack.
+%
+/dupvec {     % x y z (as we enter)
+   dup        % x y z z
+   4 1 roll   % z x y z
+   exch       % z x z y
+   dup        % z x z y y
+   5 1 roll   % y z x z y
+   3 2 roll   % y z z y x
+   dup        % y z z y x x
+   6 1 roll   % x y z z y x
+   exch       % x y z z x y
+   3 2 roll   % x y z x y z
+} def
+
+%
+% The mulvec routine multiplies a 3D vector on the stack by a scalar.
+%
+/mulvec {     % x y z a (as we enter)
+   dup        % x y z a a
+   dup        % x y z a a a
+   6 2 roll   % a a x y z a
+   mul        % a a x y a*z
+   4 2 roll   % a y a*z a x
+   mul        % a y a*z a*x
+   4 2 roll   % a*z a*x a y
+   mul        % a*z a*x a*y
+   3 2 roll   % a*x a*y a*z == a*(x y z)
+} def
+
+%
+% The addvec routine adds two 3D vectors on the stack.
+%
+/addvec {     % x y z a b c (as we enter)
+   3 1 roll   % x y z c a b
+   exch       % x y z c b a
+   4 2 roll   % x y b a z c
+   add        % x y b a (z+c)
+   5 2 roll   % a (z+c) x y b
+   add        % a (z+c) x (y+b)
+   3 2 roll   % a x (y+b) (z+c)
+   4 2 roll   % (y+b) (z+c) a x
+   add        % (y+b) (z+c) (a+x)
+   3 1 roll   % (a+x) (y+b) (z+c) == (x y z) + (a b c)
+} def
+
+%
+% The swapvec routine swaps two 3D vectors on the stack.
+%
+/swapvec {    % x y z a b c (as we enter)
+   6 3 roll   % a b c x y z
+} def
+
+%
+% The k1 routine computes the first Runge-Kutta term k1 = k1x k1y k1z, where
+%    k1x = fx((x,y,z)),
+%    k1y = fy((x,y,z)),
+%    k1z = fz((x,y,z)).
+%
+/k1 {         % x y z (as we enter)
+   dupvec     % x y z x y z
+   f          % x y z fx fy fz == x y z k1x k1y k1z
+} def
+
+%
+% The k2 routine computes the second Runge-Kutta term k2 = k2x k2y k2z, where
+%    k2x = fx((x,y,z)+(h/2)*(k1x,k1y,k1z)),
+%    k2y = fy((x,y,z)+(h/2)*(k1x,k1y,k1z)),
+%    k2z = fz((x,y,z)+(h/2)*(k1x,k1y,k1z)).
+%
+/k2 {         % x y z k1x k1y k1z (as we enter)
+   dupvec     % x y z k1x k1y k1z k1x k1y k1z
+   h          % x y z k1x k1y k1z k1x k1y k1z h
+   2          % x y z k1x k1y k1z k1x k1y k1z h 2
+   div        % x y z k1x k1y k1z k1x k1y k1z (h/2)
+   mulvec     % x y z k1x k1y k1z (h/2)*k1x (h/2)*k1y (h/2)*k1z
+   9 6 roll   % k1x k1y k1z (h/2)*k1x (h/2)*k1y (h/2)*k1z x y z
+   dupvec     % k1x k1y k1z (h/2)*k1x (h/2)*k1y (h/2)*k1z x y z x y z
+   12 3 roll  % x y z k1x k1y k1z (h/2)*k1x (h/2)*k1y (h/2)*k1z x y z
+   addvec     % x y z k1x k1y k1z (x+(h/2)*k1x) (y+(h/2)*k1y) (z+(h/2)*k1z)
+   f          % x y z k1x k1y k1z k2x k2y k2z
+} def
+
+%
+% The k3 routine computes the third Runge-Kutta term k3 = k3x k3y k3z, where
+%    k3x = fx((x,y,z)+(h/2)*(k2x,k2y,k2z)),
+%    k3y = fy((x,y,z)+(h/2)*(k2x,k2y,k2z)),
+%    k3z = fz((x,y,z)+(h/2)*(k2x,k2y,k2z)).
+%
+/k3 {         % {x} {k1} {k2} (as we enter)
+   dupvec     % {x} {k1} {k2} {k2}
+   h          % {x} {k1} {k2} {k2} h
+   2          % {x} {k1} {k2} {k2} h 2
+   div        % {x} {k1} {k2} {k2} (h/2)
+   mulvec     % {x} {k1} {k2} (h/2)*{k2}
+   12 9 roll  % {k1} {k2} (h/2)*{k2} {x}
+   dupvec     % {k1} {k2} (h/2)*{k2} {x} {x}
+   15 3 roll  % {x} {k1} {k2} (h/2)*{k2} {x}
+   addvec     % {x} {k1} {k2} {x}+(h/2)*{k2}
+   f          % {x} {k1} {k2} {k3}
+} def
+
+%
+% The k4 routine computes the fourth Runge-Kutta term k4 = k4x k4y k4z, where
+%    k4x = fx((x,y,z)+h*(k3x,k3y,k3z)),
+%    k4y = fy((x,y,z)+h*(k3x,k3y,k3z)),
+%    k4z = fz((x,y,z)+h*(k3x,k3y,k3z)).
+%
+/k4 {         % {x} {k1} {k2} {k3} (as we enter)
+   dupvec     % {x} {k1} {k2} {k3} {k3}
+   h          % {x} {k1} {k2} {k3} {k3} h
+   mulvec     % {x} {k1} {k2} {k3} h*{k3}
+   15 12 roll % {k1} {k2} {k3} h*{k3} {x}
+   dupvec     % {k1} {k2} {k3} h*{k3} {x} {x}
+   18 3 roll  % {x} {k1} {k2} {k3} h*{k3} {x}
+   addvec     % {x} {k1} {k2} {k3} {x}+h*{k3}
+   f          % {x} {k1} {k2} {k3} {k4}
+} def
+
+%
+% Given a 3D coordinate triplet on the stack, the rn routine computes the
+% next point of the Lorenz trajectory by the four-point Runge-Kutta method,
+% given the step size h and right-hand side of the Lorenz system of ODEs
+% as defined by the f routine (wrapping up the fx, fy and fz routines).
+%
+/rn {         % {x} == x y z (as we enter)
+   k1         % {x} {k1}
+   k2         % {x} {k1} {k2}
+   k3         % {x} {k1} {k2} {k3}
+   k4         % {x} {k1} {k2} {k3} {k4}
+   9 3 roll   % {x} {k1} {k4} {k2} {k3}
+   addvec     % {x} {k1} {k4} {k2}+{k3}
+   2          % {x} {k1} {k4} {k2}+{k3} 2
+   mulvec     % {x} {k1} {k4} 2*({k2}+{k3})
+   addvec     % {x} {k1} 2*({k2}+{k3})+{k4}
+   addvec     % {x} {k1}+2*({k2}+{k3})+{k4}
+   h          % {x} {k1}+2*({k2}+{k3})+{k4} h
+   6          % {x} {k1}+2*({k2}+{k3})+{k4} h 6
+   div        % {x} {k1}+2*({k2}+{k3})+{k4} (h/6)
+   mulvec     % {x} (h/6)*({k1}+2*({k2}+{k3})+{k4})
+   addvec     % {x}+(h/6)*({k1}+2*({k2}+{k3})+{k4}) == {xnew}
+} def
+
+%
+% Define a set of parameters to be used for the actual mapping of the
+% numerical solution of the ODE to page coordinates. (This may be read
+% as being the "Page Setup" section.)
+%
+/xc 140 def   % Page x-coordinate of origo in points (1/72 inch)
+/yc 500 def   % Page y-coordinate of origo in points (1/72 inch)
+/scale 7 def  % Scale in points per dimensionless unit in plot
+/origo {0 0 0} def
+/xaxislength {20} def
+/yaxislength {20} def
+/zaxislength {20} def
+/xaxis {1 0 0 xaxislength mulvec} def
+/yaxis {0 1 0 yaxislength mulvec} def
+/zaxis {0 0 1 zaxislength mulvec} def
+
+%
+% Compute the 2D page coordinates (xp,yp) in terms of coordinates expressed
+% in the 3D reference frame (x,y,z) in which the differential equation is
+% solved. For an informal description of the 3D projection matrix, see
+% http://en.wikipedia.org/wiki/3D_projection
+%
+% Notice how the PostScript operator 'exch' throughout is used for the parsing
+% of input parameters to this routine, in the form "/{myregister} exch def".
+% Example: Suppose we wish to assign the value '1' to the register '/radius'.
+% If our input argument is '1', the PostScript stack then starts with:
+%      1
+%      /radius
+% After performing the 'exch' we then have the stack
+%      /radius
+%      1
+% after which the def command finally performs the actual assignment of the
+% value into the register '/radius'.
+%
+/screencoord {  % Stack: x y z       (as we enter)
+   dupvec       % Stack: x y z x y z
+   3 dict begin % Begin dictionary; Active until next 'end' statement
+   /az exch def % Stack: x y z x y   (with z read into az register)
+   /ay exch def % Stack: x y z x     (with y read into ay register)
+   /ax exch def % Stack: x y z       (with x read into ax register)
+   /cx {10} def
+   /cy {10} def
+   /cz {10} def
+   /axcx {ax cx sub} def % ax-cx
+   /aycy {ay cy sub} def % ay-cy
+   /azcz {az cz sub} def % az-cz
+   /theta_x {0} def % Angle expressed in degrees
+   /theta_y {20} def % Angle expressed in degrees
+   /theta_z {20} def % Angle expressed in degrees
+   /ctx {theta_x cos} bind def
+   /stx {theta_x sin} bind def
+   /cty {theta_y cos} bind def
+   /sty {theta_y sin} bind def
+   /ctz {theta_z cos} bind def
+   /stz {theta_z sin} bind def
+   /szyy {stz aycy mul} bind def
+   /czxx {ctz axcx mul} bind def
+   /syzz {sty azcz mul} bind def
+   /cyzz {cty azcz mul} bind def
+   /czyy {ctz aycy mul} bind def
+   /szxx {stz axcx mul} bind def
+   /dx {szyy czxx add cty mul syzz sub} bind def
+%   /dy {Still to be written for the general Euler angles}
+%   /dz {Still to be written for the general Euler angles}
+   end          % End of dictionary
+   100 100
+} bind def
+
+/pagecoord_xy {  % x y z (as we enter)
+   3 1 roll   % z x y
+   dup        % z x y y
+   4 2 roll   % y z x y
+   exch       % y z y x
+   dup        % y z y x x
+   5 1 roll   % x y z y x
+   scale      % x y z y x scale
+   mul        % x y z y scale*x
+   xc         % x y z y scale*x xc
+   add        % x y z y xc+scale*x
+   exch       % x y z xc+scale*x y
+   scale      % x y z xc+scale*x y scale
+   mul        % x y z xc+scale*x scale*y
+   yc         % x y z xc+scale*x scale*y yc
+   add        % x y z xc+scale*x yc+scale*y
+} def
+
+/pagecoord_yz {  % x y z (as we enter)
+   dup        % x y z z
+   4 2 roll   % z z x y
+   dup        % z z x y y
+   scale      % z z x y y scale
+   mul        % z z x y scale*y
+   yc         % z z x y scale*y yc
+   add        % z z x y yc+scale*y
+   5 4 roll   % z x y yc+scale*y z
+   scale      % z x y yc+scale*y z scale
+   mul        % z x y yc+scale*y scale*z
+   xc         % z x y yc+scale*y scale*z xc
+   add        % z x y yc+scale*y xc+scale*z
+   exch       % z x y xc+scale*z yc+scale*y
+   5 2 roll   % xc+scale*z yc+scale*y z x y
+   3 2 roll   % xc+scale*z yc+scale*y x y z
+   5 3 roll   % x y z xc+scale*z yc+scale*y
+} def
+
+/drawcoordsys {
+   /Helvetica-Italic findfont 10 scalefont setfont
+   % Draw the X-axis and its label
+   origo pagecoord_yz moveto
+   xaxis pagecoord_yz lineto
+   (X) show % The previous 'lineto' has already put us in place for the label
+   stroke
+   % Draw the Y-axis and its label
+   origo pagecoord_yz moveto
+   yaxis pagecoord_yz lineto
+   (Y) show % The previous 'lineto' has already put us in place for the label
+   stroke
+   % Draw the Z-axis and its label
+   origo pagecoord_yz moveto
+   zaxis pagecoord_yz lineto
+   (Z) show % The previous 'lineto' has already put us in place for the label
+   stroke
+} def
+
+/title {
+   /Helvetica-Bold findfont 12 scalefont setfont
+   100 762 moveto (Lorenz attractor) show
+   /Helvetica findfont 10 scalefont setfont
+   100 748 moveto (Trajectory solved directly in PostScript by odesolv.ps) show
+   /Helvetica findfont 10 scalefont setfont
+   100 736 moveto (http://jonsson.eu/programs/postscript/odesolv/) show
+} def
+
+%
+%  Main program begins here.
+%
+title            % Title and caption
+drawcoordsys     % Draw coordinate axes
+clear            % Clear stack
+r0               % Stack: x0 y0 z0      (enter starting point)
+pagecoord_yz     % Stack: x0 y0 z0 x_page y_page (map to page)
+% screencoord
+moveto           % Stack: x0 y0 z0      (position pen to starting point)
+num_iter {       % Main loop
+   rn            % Stack: x_{n+1} y_{n+1} z_{n+1}    (next point solved for)
+   pagecoord_yz  % Stack: x_{n+1} y_{n+1} z_{n+1} x_page y_page (map to page)
+   % screencoord
+   lineto        % Stack: x_{n+1} y_{n+1} z_{n+1}    (draw line to next point)
+} repeat         % Repeat main loop num_iter Runge-Kutta iterations
+stroke
+showpage         % Display everything drawn on the current page
